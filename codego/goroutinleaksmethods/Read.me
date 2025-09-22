@@ -1,0 +1,81 @@
+# MyProject
+Goroutine leaks are a common problem in Go APIs when goroutines are created 
+but never exit. Detecting them isn’t always straightforward, but there are some 
+patterns and tools you can use.
+
+
+Ways to Detect Goroutine Leaks :
+
+------------------------------------------------------------------------------------------------
+1. Using runtime.NumGoroutine()
+
+The Go runtime provides a count of active goroutines.
+You can periodically log or expose this metric (via Prometheus, logs, etc.).
+If the number keeps growing over time (when workload is steady), you probably have a leak.
+
+1️⃣Active goroutines: 2
+
+What it is: Number of goroutines currently alive (including main).
+
+In your program:
+main() is 1 goroutine.
+The anonymous go func() is the 2nd goroutine.
+
+Explanation:
+
+"Go programs run multiple goroutines concurrently. runtime.NumGoroutine() helps us monitor active goroutines, 
+which is useful to detect leaks or ensure that all tasks are completed."
+
+2️⃣ no of cpu 16
+
+What it is: Number of logical CPUs available to the Go runtime (runtime.NumCPU()).
+In your machine: 16 logical cores (hyperthreaded CPUs included).
+
+Explanation:
+
+"Go runtime schedules goroutines across available CPU cores. runtime.NumCPU() tells us how many logical cores are available, which helps optimize parallelism in CPU-bound tasks."
+
+3️⃣ no of cgocall 18
+
+What it is: Number of calls made from Go to C code via cgo (runtime.NumCgoCall()).
+Why non-zero: Even if your code doesn’t explicitly call C, 
+the Go runtime itself may call C functions internally (e.g., for fmt.Printf, runtime functions).
+
+Explanation:
+
+"CGO allows Go to call C functions. runtime.NumCgoCall() gives the count of such calls. 
+Monitoring it is useful when interfacing Go with C for performance or debugging."
+
+---------------------------------------------------------------------------------------------
+2. Using pprof
+
+Go’s built-in net/http/pprof package can profile goroutines.
+http://localhost:6060/debug/pprof/goroutine?debug=2
+
+Once it’s running, open in browser:
+
+http://localhost:6060/debug/pprof/ → index page
+
+http://localhost:6060/debug/pprof/goroutine → goroutines profile
+
+http://localhost:6060/debug/pprof/heap → heap profile
+
+------------------------------------------------------------------------------------------------
+3.context.WithTimeout creates a context that auto-cancels after 2 seconds.
+
+Each goroutine listens to:
+ctx.Done() → shutdown signal
+time.After → simulated work
+When 2 seconds pass, ctx.Done() unblocks all goroutines, letting them exit cleanly.
+
+“Instead of manually wiring a done channel, we can use Go’s built-in context.Context. 
+With context.WithTimeout or context.WithCancel, we can signal multiple goroutines to stop at once. 
+This is the idiomatic way to manage goroutine lifecycles in Go and helps prevent leaks.”
+
+
+
+✅ Rule of Thumb:
+
+If runtime.NumGoroutine() grows indefinitely under steady traffic, or pprof 
+shows many goroutines stuck in the same function, you have a leak.
+Always pair goroutines with exit conditions (context, close channels, etc.).
